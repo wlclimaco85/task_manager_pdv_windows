@@ -1,0 +1,182 @@
+name: Build Windows Release (PDV NFC-e)
+
+on:
+  push:
+    branches:
+      - main
+      - desenv
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "[LOG] Workspace info"
+        shell: pwsh
+        run: |
+          Write-Host "=== WORKSPACE INFO ==="
+          Write-Host "github.workspace : ${{ github.workspace }}"
+          Write-Host "CWD              : $(Get-Location)"
+          Write-Host "Runner OS        : ${{ runner.os }}"
+          Write-Host "Runner arch      : ${{ runner.arch }}"
+          Get-ChildItem -Name | Write-Host
+
+      # ── 2. Flutter setup ─────────────────────────────────────────────────────
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: "[LOG] Flutter version"
+        run: flutter --version
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: "[LOG] Flutter config"
+        run: flutter config
+
+      # ── 3. Dependencies ──────────────────────────────────────────────────────
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: "[LOG] Pub deps tree (top level)"
+        run: flutter pub deps --no-dev 2>&1 | Select-Object -First 40
+        shell: pwsh
+        continue-on-error: true
+
+      # ── 4. Analyze (não bloqueia, só loga) ───────────────────────────────────
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-infos 2>&1
+        continue-on-error: true
+
+      # ── 5. Tests ─────────────────────────────────────────────────────────────
+      - name: Run Flutter tests
+        run: flutter test --no-pub 2>&1
+        continue-on-error: true
+
+      # ── 6. Build ─────────────────────────────────────────────────────────────
+      - name: "[LOG] Pre-build directory"
+        shell: pwsh
+        run: |
+          Write-Host "=== PRE-BUILD DIRECTORY ==="
+          Get-ChildItem -Recurse -Depth 2 -Name | Write-Host
+
+      - name: Build Windows Release
+        run: >
+          flutter build windows
+          --release
+          --verbose
+          --dart-define=BACKEND_URL=https://appacademia-production-be7e.up.railway.app
+          2>&1
+
+      - name: "[LOG] Post-build directory tree"
+        shell: pwsh
+        run: |
+          Write-Host "=== POST-BUILD TREE ==="
+          if (Test-Path "build") {
+            Get-ChildItem -Path "build" -Recurse -Depth 4 -Name | Write-Host
+          } else {
+            Write-Host "ERRO: pasta 'build' nao encontrada!"
+          }
+
+      - name: "[LOG] Locate .exe"
+        shell: pwsh
+        run: |
+          Write-Host "=== PROCURANDO .exe ==="
+          $exes = Get-ChildItem -Path "build" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue
+          if ($exes) {
+            $exes | ForEach-Object { Write-Host "FOUND: $($_.FullName)" }
+          } else {
+            Write-Host "NENHUM .exe encontrado em build/"
+          }
+
+      # ── 7. Package ───────────────────────────────────────────────────────────
+      - name: Get short SHA
+        id: vars
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Create installer zip
+        shell: pwsh
+        run: |
+          Write-Host "=== CRIANDO ZIP ==="
+          $candidates = @(
+            "build\windows\x64\runner\Release",
+            "build\windows\runner\Release",
+            "build\windows\x64\runner\release",
+            "build\windows\runner\release"
+          )
+          $buildPath = $null
+          foreach ($c in $candidates) {
+            Write-Host "Testando: $c -> $(Test-Path $c)"
+            if (Test-Path $c) { $buildPath = $c; break }
+          }
+          if ($null -eq $buildPath) {
+            Write-Host "ERRO: nenhum caminho de build encontrado. Conteudo de build/:"
+            Get-ChildItem -Path "build" -Recurse -Depth 5 | Write-Host
+            exit 1
+          }
+          Write-Host "Usando: $buildPath"
+          $zipDest = "${{ github.workspace }}\task_manager_pdv_windows.zip"
+          Compress-Archive -Path "$buildPath\*" -DestinationPath $zipDest -Force
+          Write-Host "ZIP criado em: $zipDest"
+          $size = (Get-Item $zipDest).Length / 1MB
+          Write-Host "Tamanho: $([math]::Round($size,2)) MB"
+
+      # ── 8. Upload Artifact ───────────────────────────────────────────────────
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: task_manager_pdv_windows
+          path: ${{ github.workspace }}/task_manager_pdv_windows.zip
+          retention-days: 30
+
+      # ── 9. Release ───────────────────────────────────────────────────────────
+      - name: Delete old release (ignore errors)
+        uses: cb80/delrel@latest
+        continue-on-error: true
+        with:
+          tag: latest-windows
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-windows
+          name: "PDV NFC-e Windows - Supermercado (build ${{ steps.vars.outputs.SHA_SHORT }})"
+          body: |
+            ## Download PDV NFC-e Windows (Frente de Caixa)
+
+            1. Baixe `task_manager_pdv_windows.zip`
+            2. Extraia em uma pasta de sua escolha (ex.: `C:\PDV_AppAcademia`)
+            3. Execute o aplicativo `task_manager_pdv_windows.exe`
+
+            ### Recursos Inclusos:
+            - Frente de Caixa com Bobina Fiscal Virtual
+            - Leitura de Código de Barras (EAN-13, EAN-8) e Teclas de Atalho (F1 a F12)
+            - Emissão de NFC-e online e Contingência Offline
+            - Impressão Térmica ESC/POS (80mm/58mm) com QR Code
+            - Controle de Caixa: Abertura, Suprimento, Sangria, Leitura X e Redução Z
+            - Alçada de Gerente para cancelamento de itens e cupom fiscal
+
+            **Build:** ${{ steps.vars.outputs.SHA_SHORT }}
+            **Commit:** ${{ github.event.head_commit.message }}
+            **Data:** ${{ github.event.head_commit.timestamp }}
+          files: ${{ github.workspace }}/task_manager_pdv_windows.zip
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
