@@ -15,8 +15,8 @@ class LoginOperadorScreen extends StatefulWidget {
 }
 
 class _LoginOperadorScreenState extends State<LoginOperadorScreen> {
-  final _usuarioCtrl = TextEditingController(text: 'operador');
-  final _senhaCtrl = TextEditingController(text: '123456');
+  final _usuarioCtrl = TextEditingController();
+  final _senhaCtrl = TextEditingController();
   final _caixaCtrl = TextEditingController(text: '1');
   final _urlCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -66,6 +66,10 @@ class _LoginOperadorScreenState extends State<LoginOperadorScreen> {
       final operadorNome = dados['nome'] ?? usuario.toUpperCase();
       final operadorId = dados['id'] ?? 1;
 
+      // Carrega configuração do emitente (empresaId, parceiroId, ambiente)
+      await _api.carregarConfig();
+
+      if (!mounted) return;
       setState(() => _carregando = false);
 
       // Solicita abertura de caixa se não estiver aberto
