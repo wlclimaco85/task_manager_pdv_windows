@@ -41,6 +41,7 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
   void initState() {
     super.initState();
     widget.notifier.addListener(_onStateChange);
+    widget.notifier.iniciarSincronizacaoAutomatica();
     _relogioTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _agora = DateTime.now());
     });
@@ -411,10 +412,13 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
                   ),
                   const Spacer(),
                   _badgeStatus(
-                    label: widget.notifier.statusSefaz == StatusSefaz.online
-                        ? 'SEFAZ ONLINE'
-                        : 'SEFAZ CONTINGÊNCIA',
-                    cor: widget.notifier.statusSefaz == StatusSefaz.online
+                    label: widget.notifier.pendentesEnvio > 0
+                        ? 'PENDENTES NFC-e: ${widget.notifier.pendentesEnvio}'
+                        : widget.notifier.statusSefaz == StatusSefaz.online
+                            ? 'SEFAZ ONLINE'
+                            : 'SEFAZ CONTINGÊNCIA',
+                    cor: widget.notifier.pendentesEnvio == 0 &&
+                            widget.notifier.statusSefaz == StatusSefaz.online
                         ? PdvColors.success
                         : PdvColors.warning,
                     icone: Icons.cloud_done,
@@ -470,7 +474,7 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
                                 const Icon(Icons.receipt_long, size: 18, color: PdvColors.accent),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'CUPOM FISCAL ELETRÔNICO (NFC-e Nº ${venda?.numeroCupom ?? 0})',
+                                  'CUPOM FISCAL ELETRÔNICO (Venda Nº ${venda?.numeroCupom ?? 0})',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
