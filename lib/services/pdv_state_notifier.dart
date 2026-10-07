@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/constants/pdv_constants.dart';
 import '../models/caixa_sessao.dart';
@@ -20,6 +21,10 @@ class PdvStateNotifier extends ChangeNotifier {
   String? _mensagemStatus;
   StatusSefaz _statusSefaz = StatusSefaz.online;
   int _contadorCupom = 1001;
+  int _pendentesEnvio = 0;
+  Timer? _timerSincronizacao;
+  String? _ultimoAvisoFila;
+  static const Duration _intervaloSincronizacao = Duration(seconds: 60);
 
   CaixaSessao? get caixa => _caixa;
   VendaPdv? get vendaAtual => _vendaAtual;
@@ -28,6 +33,9 @@ class PdvStateNotifier extends ChangeNotifier {
   bool get processando => _processando;
   String? get mensagemStatus => _mensagemStatus;
   StatusSefaz get statusSefaz => _statusSefaz;
+  /// Vendas gravadas na fila local aguardando emissão no backend.
+  int get pendentesEnvio => _pendentesEnvio;
+  String? get ultimoAvisoFila => _ultimoAvisoFila;
   bool get isCaixaAberto => _caixa != null && _caixa!.status == StatusCaixa.aberto;
   bool get temVendaEmAndamento => _vendaAtual != null && _vendaAtual!.itensAtivos.isNotEmpty;
 
@@ -49,6 +57,33 @@ class PdvStateNotifier extends ChangeNotifier {
     );
     _iniciarNovaVenda();
     notifyListeners();
+  }
+
+  /// Carrega o contador da fila e tenta enviar pendências periodicamente.
+  void iniciarSincronizacaoAutomatica() {
+    _timerSincronizacao?.cancel();
+    _timerSincronizacao =
+        Timer.periodic(_intervaloSincronizacao, (_) => sincronizarFila());
+    sincronizarFila();
+  }
+
+  Future<void> sincronizarFila() async {
+    try {
+      final emitidas = await _api.sincronizarPendentes();
+      _pendentesEnvio = await _api.contarPendentes();
+      if (emitidas > 0) {
+        _ultimoAvisoFila = '$emitidas venda(s) pendente(s) emitida(s) com sucesso.';
+      }
+    } catch (e, st) {
+      debugPrint('Falha ao sincronizar fila de NFC-e: $e\n$st');
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _timerSincronizacao?.cancel();
+    super.dispose();
   }
 
   void fecharCaixaReducaoZ() {
@@ -280,6 +315,16 @@ class PdvStateNotifier extends ChangeNotifier {
     final troco = _vendaAtual!.totalPago - _vendaAtual!.totalLiquido;
     final resNfce = await _api.emitirNfce(_vendaAtual!);
 
+    // Rejeição/erro de validação: NÃO finaliza a venda nem imprime cupom.
+    if (resNfce['sucesso'] != true) {
+      _processando = false;
+      notifyListeners();
+      return {
+        'sucesso': false,
+        'mensagem': resNfce['mensagem'] ?? 'Falha na emissão da NFC-e',
+      };
+    }
+
     final vendaFinal = VendaPdv(
       id: _vendaAtual!.id,
       numeroCupom: _vendaAtual!.numeroCupom,
@@ -298,6 +343,9 @@ class PdvStateNotifier extends ChangeNotifier {
       protocoloNfce: resNfce['protocolo'],
       qrCodeNfce: resNfce['qrCode'],
       contingencia: resNfce['contingencia'] ?? false,
+      pendenteEnvio: resNfce['pendenteEnvio'] ?? false,
+      numeroNfce: resNfce['numeroNfce'] as int?,
+      serieNfce: resNfce['serieNfce'] as int?,
     );
 
     _caixa?.vendas.add(vendaFinal);
@@ -305,9 +353,12 @@ class PdvStateNotifier extends ChangeNotifier {
     // Dispara impressão do cupom térmico DANFE NFC-e
     await ImpressaoService.imprimirDanfeNfce(vendaFinal);
 
-    _statusSefaz = (resNfce['contingencia'] == true)
-        ? StatusSefaz.contingencia
-        : StatusSefaz.online;
+    _statusSefaz = (resNfce['pendenteEnvio'] == true)
+        ? StatusSefaz.offline
+        : (resNfce['contingencia'] == true)
+            ? StatusSefaz.contingencia
+            : StatusSefaz.online;
+    _pendentesEnvio = await _api.contarPendentes();
 
     _iniciarNovaVenda();
     _processando = false;
@@ -319,6 +370,9 @@ class PdvStateNotifier extends ChangeNotifier {
       'chaveAcesso': vendaFinal.chaveAcessoNfce,
       'troco': troco,
       'contingencia': vendaFinal.contingencia,
+      'pendenteEnvio': vendaFinal.pendenteEnvio,
+      'numeroNfce': vendaFinal.numeroNfce,
+      'mensagem': resNfce['mensagem'],
     };
   }
 }

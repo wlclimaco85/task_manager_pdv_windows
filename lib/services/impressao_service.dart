@@ -36,10 +36,25 @@ class ImpressaoService {
               pw.Text('AV. PRINCIPAL, 1000 - CENTRO - SAO PAULO/SP',
                   style: const pw.TextStyle(fontSize: 7)),
               pw.Divider(thickness: 0.5),
-              pw.Text('DANFE NFC-e - Documento Auxiliar da',
+              pw.Text(
+                  venda.pendenteEnvio
+                      ? 'COMPROVANTE DE VENDA'
+                      : 'DANFE NFC-e - Documento Auxiliar da',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              pw.Text('Nota Fiscal de Consumidor Eletrônica',
+              pw.Text(
+                  venda.pendenteEnvio
+                      ? 'NÃO É DOCUMENTO FISCAL'
+                      : 'Nota Fiscal de Consumidor Eletrônica',
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              if (venda.pendenteEnvio)
+                pw.Container(
+                  margin: const pw.EdgeInsets.symmetric(vertical: 3),
+                  padding: const pw.EdgeInsets.all(3),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+                  child: pw.Text('NFC-e PENDENTE DE EMISSÃO (SEM COMUNICAÇÃO COM O SERVIDOR). SERÁ EMITIDA AUTOMATICAMENTE.',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+                      textAlign: pw.TextAlign.center),
+                ),
               if (venda.contingencia)
                 pw.Container(
                   margin: const pw.EdgeInsets.symmetric(vertical: 3),
@@ -130,7 +145,9 @@ class ImpressaoService {
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                'NFC-e Nº ${venda.numeroCupom} Série 001 Data: ${_dataHora.format(venda.dataHora)}',
+                venda.numeroNfce != null
+                    ? 'NFC-e Nº ${venda.numeroNfce} Série ${(venda.serieNfce ?? 1).toString().padLeft(3, '0')} Data: ${_dataHora.format(venda.dataHora)}'
+                    : 'Venda Nº ${venda.numeroCupom} (sem número fiscal) Data: ${_dataHora.format(venda.dataHora)}',
                 style: const pw.TextStyle(fontSize: 8),
               ),
               if (venda.protocoloNfce != null)
@@ -139,7 +156,7 @@ class ImpressaoService {
               pw.SizedBox(height: 4),
               pw.Text('CHAVE DE ACESSO:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
               pw.Text(
-                venda.chaveAcessoNfce ?? '0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000',
+                venda.chaveAcessoNfce ?? 'AGUARDANDO EMISSÃO NO SERVIDOR',
                 style: const pw.TextStyle(fontSize: 7),
                 textAlign: pw.TextAlign.center,
               ),
@@ -173,7 +190,9 @@ class ImpressaoService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => doc.save(),
-      name: 'NFC-e_${venda.numeroCupom}',
+      name: venda.numeroNfce != null
+          ? 'NFC-e_${venda.numeroNfce}'
+          : 'Venda_${venda.numeroCupom}',
     );
   }
 

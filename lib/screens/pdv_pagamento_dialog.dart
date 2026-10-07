@@ -74,6 +74,15 @@ class _PdvPagamentoDialogState extends State<PdvPagamentoDialog> {
     if (!mounted) return;
 
     if (res['sucesso'] == true) {
+      if (res['pendenteEnvio'] == true || res['contingencia'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['mensagem']?.toString() ?? 'NFC-e pendente de emissão.'),
+            backgroundColor: PdvColors.warning,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
       Navigator.of(context).pop(true);
     } else {
       setState(() {
@@ -128,7 +137,7 @@ class _PdvPagamentoDialogState extends State<PdvPagamentoDialog> {
                           ),
                         ),
                         Text(
-                          'Cupom NFC-e Nº ${venda.numeroCupom} | ${venda.itensAtivos.length} itens',
+                          'Venda Nº ${venda.numeroCupom} | ${venda.itensAtivos.length} itens',
                           style: const TextStyle(fontSize: 11, color: PdvColors.textSecondary),
                         ),
                       ],

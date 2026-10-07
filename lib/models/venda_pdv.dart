@@ -19,6 +19,11 @@ class VendaPdv {
   final String? protocoloNfce;
   final String? qrCodeNfce;
   final bool contingencia;
+  /// Venda concluída no caixa mas ainda NÃO emitida no backend (fila PENDENTE_ENVIO).
+  final bool pendenteEnvio;
+  /// Número/série atribuídos pelo backend (extraídos da chave de acesso real).
+  final int? numeroNfce;
+  final int? serieNfce;
   final String? motivoCancelamento;
   final String? gerenteCancelamento;
 
@@ -40,6 +45,9 @@ class VendaPdv {
     this.protocoloNfce,
     this.qrCodeNfce,
     this.contingencia = false,
+    this.pendenteEnvio = false,
+    this.numeroNfce,
+    this.serieNfce,
     this.motivoCancelamento,
     this.gerenteCancelamento,
   });
@@ -76,6 +84,9 @@ class VendaPdv {
       'protocoloNfce': protocoloNfce,
       'qrCodeNfce': qrCodeNfce,
       'contingencia': contingencia,
+      'pendenteEnvio': pendenteEnvio,
+      'numeroNfce': numeroNfce,
+      'serieNfce': serieNfce,
       'motivoCancelamento': motivoCancelamento,
       'gerenteCancelamento': gerenteCancelamento,
     };
