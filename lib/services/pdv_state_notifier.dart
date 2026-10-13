@@ -284,6 +284,27 @@ class PdvStateNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Define o desconto geral (R$) da venda; limitado ao subtotal e nunca negativo.
+  void definirDescontoGeral(double valor) {
+    if (_vendaAtual == null) _iniciarNovaVenda();
+    final v = _vendaAtual!;
+    final desconto = valor < 0 ? 0.0 : (valor > v.subtotal ? v.subtotal : valor);
+    _vendaAtual = VendaPdv(
+      id: v.id,
+      numeroCupom: v.numeroCupom,
+      dataHora: v.dataHora,
+      caixaNumero: v.caixaNumero,
+      operadorId: v.operadorId,
+      operadorNome: v.operadorNome,
+      cpfCnpjCliente: v.cpfCnpjCliente,
+      nomeCliente: v.nomeCliente,
+      itens: v.itens,
+      pagamentos: v.pagamentos,
+      descontoGeral: double.parse(desconto.toStringAsFixed(2)),
+    );
+    notifyListeners();
+  }
+
   void adicionarPagamento(String codigoSefaz, double valor) {
     if (_vendaAtual == null || valor <= 0) return;
     _vendaAtual!.pagamentos.add(PagamentoItem(codigoSefaz: codigoSefaz, valor: valor));
