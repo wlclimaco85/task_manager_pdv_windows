@@ -126,6 +126,8 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
       _abrirLeituraX();
     } else if (key == LogicalKeyboardKey.f10) {
       _abrirReducaoZ();
+    } else if (key == LogicalKeyboardKey.f11) {
+      _abrirDesconto();
     } else if (key == LogicalKeyboardKey.f12) {
       _abrirPagamento();
     }
@@ -150,6 +152,37 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
     );
     if (dados != null) {
       widget.notifier.identificarCliente(dados['cpfCnpj'] ?? '', dados['nome']);
+    }
+    _garantirFocoInput();
+  }
+
+  Future<void> _abrirDesconto() async {
+    final venda = widget.notifier.vendaAtual;
+    if (venda == null || venda.itensAtivos.isEmpty) return;
+    final ctrl = TextEditingController(
+        text: venda.descontoGeral > 0 ? venda.descontoGeral.toStringAsFixed(2).replaceAll('.', ',') : '');
+    final aplicar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: PdvColors.surface,
+        title: const Text('DESCONTO NA VENDA [F11]'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Desconto em R\$ (subtotal ${_moeda.format(venda.subtotal)})',
+          ),
+          onSubmitted: (_) => Navigator.of(ctx).pop(true),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('CANCELAR')),
+          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('APLICAR')),
+        ],
+      ),
+    );
+    if (aplicar == true) {
+      widget.notifier.definirDescontoGeral(double.tryParse(ctrl.text.replaceAll(',', '.')) ?? 0);
     }
     _garantirFocoInput();
   }
@@ -359,6 +392,7 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
             Text('[F8]  - Suprimento de Caixa (Reforço de Troco)'),
             Text('[F9]  - Leitura X (Conferência Parcial do Turno)'),
             Text('[F10] - Redução Z / Fechamento de Caixa'),
+            Text('[F11] - Desconto na Venda (R\$)'),
             Text('[F12 / ENTER no campo vazio] - Pagamento e Emissão da NFC-e'),
             Text('[ESC] - Cancelar / Fechar diálogos abertos'),
           ],
@@ -831,6 +865,7 @@ class _PdvCheckoutScreenState extends State<PdvCheckoutScreen> {
                   _btnAtalho('[F8] Suprimento', PdvColors.success, _abrirSuprimento),
                   _btnAtalho('[F9] Leitura X', PdvColors.primary, _abrirLeituraX),
                   _btnAtalho('[F10] Redução Z', PdvColors.error, _abrirReducaoZ),
+                  _btnAtalho('[F11] Desconto', PdvColors.accent, _abrirDesconto),
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
